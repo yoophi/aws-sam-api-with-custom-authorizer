@@ -7,10 +7,43 @@ Description: >
 Globals:
   Function:
     Timeout: 3
+Parameters:
+  KeycloakHost:
+    Type: String
+    Description: Keycloak Hostname
+  KeycloakRealm:
+    Type: String
+    Description: Keycloak Realm
+  KeycloakClientId:
+    Type: String
+    Description: ClientId
+  KeycloakClientSecret:
+    Type: String
+    Description: ClientSecret
+  KeycloakScheme:
+    Type: String
+    Default: "https"
+    AllowedValues:
+      - http
+      - https
+    Description: Keycloak Scheme
 
 Resources:
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Auth:
+        DefaultAuthorizer: MyLambdaTokenAuthorizer
+        Authorizers:
+          MyLambdaTokenAuthorizer:
+            FunctionArn: !GetAtt MyAuthFunction.Arn
+            Identity:
+              Header: Authorization
+              ReauthorizeEvery: 20 # default 300
+
   HelloWorldFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
       CodeUri: custom_authorizer_app/hello_world/
       Handler: app.lambda_handler
@@ -18,19 +51,39 @@ Resources:
       Architectures:
         - x86_64
       Events:
-        HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+        GetRoot:
+          Type: Api
           Properties:
+            RestApiId: !Ref MyApi
             Path: /hello
             Method: get
+
+  MyAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: custom_authorizer_app/custom_authorizer/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          KEYCLOAK_HOST: !Ref KeycloakHost
+          KEYCLOAK_REALM: !Ref KeycloakRealm
+          KEYCLOAK_CLIENT_ID: !Ref KeycloakClientId
+          KEYCLOAK_CLIENT_SECRET: !Ref KeycloakClientSecret
+          KEYCLOAK_SCHEME: !Ref KeycloakScheme
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  # HelloWorldApi:
+  #   Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+  #   Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  # MyApi:
+  #   Description: "MyApi ARN"
+  #   Value: !GetAtt MyApi.Arn
   HelloWorldFunction:
     Description: "Hello World Lambda Function ARN"
     Value: !GetAtt HelloWorldFunction.Arn
